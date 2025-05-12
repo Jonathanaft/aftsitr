@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AftSitr - The NextGen Web</title>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #7B2CBF;
+            --secondary: #9D4EDD;
+            --accent: #E0AAFF;
+            --dark: #2A0944;
+            --light: #F8F9FA;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Montserrat', sans-serif;
+        }
+
+        body {
+            background: linear-gradient(135deg, var(--light) 0%, #f3e9ff 100%);
+            min-height: 100vh;
+            padding: 2rem;
+        }
+
+        .aftsitr-container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .aftsitr-navigation {
+            margin-bottom: 2rem;
+            display: flex;
+            gap: 1rem;
+        }
+
+        .aftsitr-builder {
+            background: rgba(255, 255, 255, 0.95);
+            padding: 2rem;
+            border-radius: 1rem;
+            box-shadow: 0 0.5rem 1rem rgba(0,0,0,0.1);
+        }
+
+        .aftsitr-input {
+            width: 100%;
+            padding: 1rem;
+            margin: 0.5rem 0;
+            border: 2px solid var(--accent);
+            border-radius: 0.5rem;
+            font-size: 1rem;
+        }
+
+        .aftsitr-button {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            cursor: pointer;
+            transition: transform 0.2s;
+            width: 100%;
+        }
+
+        .aftsitr-button:hover {
+            transform: translateY(-2px);
+        }
+
+        #aftsitrViewer {
+            display: none;
+            background: white;
+            padding: 2rem;
+            border-radius: 1rem;
+            box-shadow: 0 0.5rem 1rem rgba(0,0,0,0.1);
+        }
+
+        .site-viewer-content img {
+            max-width: 100%;
+            height: 300px;
+            object-fit: cover;
+            border-radius: 0.5rem;
+            margin: 1rem 0;
+        }
+
+        .back-button {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem;
+            cursor: pointer;
+            margin-bottom: 1rem;
+        }
+
+        #shareLink {
+            margin-top: 1rem;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="aftsitr-container">
+        <div class="aftsitr-navigation">
+            <input type="text" class="aftsitr-input" id="visitDomain" placeholder="Enter .aft domain">
+            <button class="aftsitr-button" onclick="visitSite()">Visit Site</button>
+        </div>
+
+        <div id="aftsitrViewer">
+            <button class="back-button" onclick="showBuilder()">← New Site</button>
+            <div class="site-viewer-content" id="siteViewerContent"></div>
+        </div>
+
+        <div class="aftsitr-builder" id="builderSection">
+            <h1>AftSitr Publisher</h1>
+            <input type="text" class="aftsitr-input" id="siteTitle" placeholder="Site Title">
+            <input type="text" class="aftsitr-input" id="siteDomain" placeholder="your-site-name.aft">
+            <input type="file" class="aftsitr-input" id="siteImage" accept="image/*">
+            <textarea class="aftsitr-input" id="siteContent" placeholder="Your content..." rows="4"></textarea>
+            <button class="aftsitr-button" onclick="aftsitrPublish()">Publish Site</button>
+            <div id="shareLink">
+                <p>Local Share Link:</p>
+                <input type="text" id="publicUrl" readonly>
+                <button onclick="copyPublicUrl()">Copy</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Legacy data migration
+        let aftsitrSites = JSON.parse(localStorage.getItem('aftsitrSites')) || [];
+        aftsitrSites = aftsitrSites.map(site => {
+            // Backwards compatibility for old sites
+            return {
+                public: true,
+                ...site,
+                domain: site.domain || `${site.title.toLowerCase().replace(/ /g, '-')}.aft`
+            };
+        });
+
+        // Handle URL parameters
+        const urlParams = new URLSearchParams(window.location.search);
+        const requestedDomain = urlParams.get('domain');
+        
+        if(requestedDomain) {
+            visitSite(requestedDomain);
+        } else {
+            showBuilder();
+        }
+
+        function aftsitrPublish() {
+            const title = document.getElementById('siteTitle').value;
+            let domain = document.getElementById('siteDomain').value.toLowerCase().trim();
+            const content = document.getElementById('siteContent').value;
+            const imageFile = document.getElementById('siteImage').files[0];
+
+            // Auto-format domain
+            if (!domain.endsWith('.aft')) domain += '.aft';
+            domain = domain.replace(/ /g, '-');
+
+            if (!title || !domain || !content || !imageFile) {
+                alert("Complete all fields and select an image");
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const newSite = {
+                    title,
+                    domain,
+                    content,
+                    image: e.target.result,
+                    created: new Date().toISOString(),
+                    public: true
+                };
+
+                // Update or create site
+                const existingIndex = aftsitrSites.findIndex(s => s.domain === domain);
+                if(existingIndex > -1) {
+                    aftsitrSites[existingIndex] = newSite;
+                } else {
+                    aftsitrSites.push(newSite);
+                }
+
+                localStorage.setItem('aftsitrSites', JSON.stringify(aftsitrSites));
+                
+                // Generate local share URL
+                const publicUrl = `${window.location.href.split('?')[0]}?domain=${encodeURIComponent(domain)}`;
+                document.getElementById('publicUrl').value = publicUrl;
+                document.getElementById('shareLink').style.display = 'block';
+                
+                // Reset form
+                document.getElementById('siteTitle').value = '';
+                document.getElementById('siteDomain').value = '';
+                document.getElementById('siteContent').value = '';
+                document.getElementById('siteImage').value = '';
+            };
+            reader.readAsDataURL(imageFile);
+        }
+
+        function visitSite(domain = null) {
+            let searchDomain = domain || document.getElementById('visitDomain').value.toLowerCase().trim();
+            
+            // Backwards compatible domain handling
+            if (!searchDomain.endsWith('.aft')) searchDomain += '.aft';
+            searchDomain = searchDomain.replace(/ /g, '-');
+
+            const site = aftsitrSites.find(s => 
+                s.domain === searchDomain && 
+                (s.public || typeof s.public === 'undefined') // Backwards compatibility
+            );
+
+            if(site) {
+                document.getElementById('builderSection').style.display = 'none';
+                document.getElementById('aftsitrViewer').style.display = 'block';
+                document.getElementById('visitDomain').value = searchDomain;
+                displaySite(site);
+                window.history.replaceState(null, null, `?domain=${encodeURIComponent(searchDomain)}`);
+            } else {
+                alert(`Site ${searchDomain} not found!`);
+                showBuilder();
+            }
+        }
+
+        function displaySite(site) {
+            const viewer = document.getElementById('siteViewerContent');
+            viewer.innerHTML = `
+                <h1>${site.title}</h1>
+                ${site.image ? `<img src="${site.image}" alt="${site.title}">` : ''}
+                <p>${site.content}</p>
+                <small>Published at ${site.domain} • ${new Date(site.created).toLocaleDateString()}</small>
+            `;
+        }
+
+        function showBuilder() {
+            document.getElementById('builderSection').style.display = 'block';
+            document.getElementById('aftsitrViewer').style.display = 'none';
+            window.history.replaceState(null, null, window.location.pathname);
+        }
+
+        function copyPublicUrl() {
+            const urlInput = document.getElementById('publicUrl');
+            urlInput.select();
+            document.execCommand('copy');
+            alert("Link copied! Note: This will only work locally in your browser.");
+        }
+
+        // Handle browser navigation
+        window.onpopstate = function() {
+            const params = new URLSearchParams(window.location.search);
+            const domain = params.get('domain');
+            if(domain) visitSite(domain);
+            else showBuilder();
+        };
+    </script>
+</body>
+</html>
